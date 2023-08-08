@@ -1,0 +1,25 @@
+parameters:
+  - name: isMultiRegional
+    type: boolean
+  - name: locationAcronymPrimary
+    type: string
+  - name: locationAcronymSecondary
+    type: string
+  - name: destroy
+    type: boolean
+
+jobs:
+- job: waitForValidation
+  displayName: Wait for manual validation
+  pool: server
+  dependsOn: 
+    - terraformPlan${{ parameters.locationAcronymPrimary }}
+    - ${{ if eq(variables.isMultiRegional, true) }}:
+      - terraformPlan${{ parameters.locationAcronymSecondary }}
+  steps:
+  - task: ManualValidation@0
+    displayName: Manual Validation
+    timeoutInMinutes: 120
+    inputs:
+      instructions: 'Please validate the Terraform Plans'
+      onTimeout: 'reject'

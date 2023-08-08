@@ -1,0 +1,96 @@
+parameters:
+  - name: azureSubscription
+    type: string
+  - name: environmentName
+    type: string
+  - name: releaseAgentPoolName
+    type: string
+  - name: locationAcronym
+    type: string
+  - name: azureServiceConnection
+    type: string
+  - name: destroy
+    type: boolean
+jobs:
+- deployment: terraformApply${{ parameters.locationAcronym }}
+  displayName: Terraform Apply ${{ parameters.locationAcronym }}
+  condition: eq(${{ parameters.destroy }}, false)
+  dependsOn: waitForValidation
+  workspace:
+    clean: all
+  timeoutInMinutes: 0
+  pool:
+    vmImage: ${{ parameters.releaseAgentPoolName }}
+  environment: ${{ parameters.environmentName }}
+  strategy:
+    runOnce:
+      deploy:
+        steps:
+          - download: current
+            artifact: Infrastructure
+          - task: TerraformInstaller@0
+            displayName: Terraform Install
+            inputs:
+              terraformVersion: 'latest'
+          - task: AzureCLI@2
+            displayName: Set subscription context
+            inputs:
+              azureSubscription: ${{ parameters.azureServiceConnection }}
+              scriptType: ps
+              scriptLocation: inlineScript
+              inlineScript: |
+                az account set --subscription ${{ parameters.azureSubscription }}
+          - task: AzureCLI@2
+            displayName: Set client secrets
+            inputs:
+              azureSubscription: ${{ parameters.azureServiceConnection }}
+              scriptType: ps
+              scriptLocation: inlineScript
+              inlineScript: |
+                $subscriptionId=$(az account show --query id -o tsv)
+                "##vso[task.setvariable variable=AZURE_CLIENT_ID;issecret=true]$env:serviceprincipalid"
+                "##vso[task.setvariable variable=AZURE_CLIENT_SECRET;issecret=true]$env:serviceprincipalkey"
+                "##vso[task.setvariable variable=AZURE_SUBSCRIPTION_ID;issecret=true]${subscriptionId}"
+                "##vso[task.setvariable variable=AZURE_TENANT_ID;issecret=true]$env:tenantid"
+              addSpnToEnvironment: true
+          - task: PowerShell@2
+            displayName: Add token to modules references
+            env:
+              HOMEPATH: $(Build.SourcesDirectory)
+              USERPROFILE: $(Build.SourcesDirectory)
+            inputs:
+              pwsh: true
+              targetType: 'inline'
+              workingDirectory: $(Build.SourcesDirectory)
+              script: |
+                git config --global url.https://$(PAT)@dev.azure.com.insteadOf "https://dev.azure.com"
+          - task: PowerShell@2
+            displayName: Terraform Init
+            env:
+              HOMEPATH: $(Build.SourcesDirectory)
+              USERPROFILE: $(Build.SourcesDirectory)
+              ARM_TENANT_ID: $(AZURE_TENANT_ID)
+              ARM_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
+              ARM_CLIENT_ID: $(AZURE_CLIENT_ID)
+              ARM_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+            inputs:
+              pwsh: true
+              targetType: 'inline'
+              script: |
+                terraform init -backend-config env/${{ parameters.environmentName }}/${{ parameters.locationAcronym }}/backend.tfvars -upgrade
+              workingDirectory: '$(Pipeline.Workspace)/Infrastructure'
+          - task: Powershell@2
+            displayName: Terraform Apply
+            env:
+              HOMEPATH: $(Build.SourcesDirectory)
+              USERPROFILE: $(Build.SourcesDirectory)            
+              ARM_TENANT_ID: $(AZURE_TENANT_ID)
+              ARM_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
+              ARM_CLIENT_ID: $(AZURE_CLIENT_ID)
+              ARM_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+            inputs:
+              pwsh: true
+              targetType: 'inline'
+              script: |
+                terraform apply -var-file="env/${{ parameters.environmentName }}/${{ parameters.locationAcronym }}/${{ parameters.environmentName }}.tfvars" -auto-approve
+              workingDirectory: '$(Pipeline.Workspace)/Infrastructure'    

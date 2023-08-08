@@ -1,0 +1,68 @@
+parameters:
+  - name: environmentName
+    type: string
+  - name: destroy
+    type: boolean
+
+
+stages:
+  - stage: ${{ parameters.environmentName }}
+    variables:
+    - template: /variables/${{ parameters.environmentName}}.yml@terraform-templates
+    jobs:
+    - template: ../jobs/deploy/terraformPlan.yml
+      parameters:
+        azureSubscription: ${{ variables.azureSubscription }}
+        azureServiceConnection: ${{ variables.azureServiceConnection }}
+        environmentName: ${{ parameters.environmentName }}
+        releaseAgentPoolName: ${{ variables.releaseAgentPoolName }}
+        locationAcronym: ${{ variables.locationAcronymPrimary }}
+        destroy: ${{ parameters.destroy }}
+    - ${{ if eq(variables.isMultiRegional, true) }}:
+      - template: ../jobs/deploy/terraformPlan.yml
+        parameters:
+          azureSubscription: ${{ variables.azureSubscription }}
+          azureServiceConnection: ${{ variables.azureServiceConnection }}
+          environmentName: ${{ parameters.environmentName }}
+          releaseAgentPoolName: ${{ variables.releaseAgentPoolName }}
+          locationAcronym: ${{ variables.locationAcronymSecondary }}
+          destroy: ${{ parameters.destroy }}
+    - template: ../jobs/deploy/waitForValidation.yml
+      parameters:
+        isMultiRegional: ${{ variables.isMultiRegional }}
+        locationAcronymPrimary: ${{ variables.locationAcronymPrimary }}
+        locationAcronymSecondary: ${{ variables.locationAcronymSecondary }}
+        destroy: ${{ parameters.destroy }}
+    - template: ../jobs/deploy/terraformApply.yml
+      parameters:
+        azureSubscription: ${{ variables.azureSubscription }}
+        azureServiceConnection: ${{ variables.azureServiceConnection }}
+        environmentName: ${{ parameters.environmentName }}
+        releaseAgentPoolName: ${{ variables.releaseAgentPoolName }}
+        locationAcronym: ${{ variables.locationAcronymPrimary }}
+        destroy: ${{ parameters.destroy }}
+    - template: ../jobs/deploy/terraformDestroy.yml
+      parameters:
+        azureSubscription: ${{ variables.azureSubscription }}
+        azureServiceConnection: ${{ variables.azureServiceConnection }}
+        environmentName: ${{ parameters.environmentName }}
+        releaseAgentPoolName: ${{ variables.releaseAgentPoolName }}
+        locationAcronym: ${{ variables.locationAcronymPrimary }}
+        destroy: ${{ parameters.destroy }}
+    - ${{ if eq(variables.isMultiRegional, true) }}:
+      - template: ../jobs/deploy/terraformApply.yml
+        parameters:
+          azureSubscription: ${{ variables.azureSubscription }}
+          azureServiceConnection: ${{ variables.azureServiceConnection }}
+          environmentName: ${{ parameters.environmentName }}
+          releaseAgentPoolName: ${{ variables.releaseAgentPoolName }}
+          locationAcronym: ${{ variables.locationAcronymSecondary }}
+          destroy: ${{ parameters.destroy }}
+      - template: ../jobs/deploy/terraformDestroy.yml
+        parameters:
+          azureSubscription: ${{ variables.azureSubscription }}
+          azureServiceConnection: ${{ variables.azureServiceConnection }}
+          environmentName: ${{ parameters.environmentName }}
+          releaseAgentPoolName: ${{ variables.releaseAgentPoolName }}
+          locationAcronym: ${{ variables.locationAcronymSecondary }}
+          destroy: ${{ parameters.destroy }}

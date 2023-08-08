@@ -1,0 +1,100 @@
+parameters:
+  - name: infrastructureDirectory
+    type: string
+    default: default
+
+jobs:
+- job: terraformInit
+  displayName: Build
+  pool:
+    vmImage: windows-latest 
+  steps:
+  - checkout: self
+    clean: true
+    persistCredentials: true
+  - task: TerraformInstaller@0
+    displayName: Terraform Install
+    inputs:
+      terraformVersion: 'latest'
+  - task: PowerShell@2
+    displayName: Add token to modules references
+    env:
+      HOMEPATH: $(Build.SourcesDirectory)
+      USERPROFILE: $(Build.SourcesDirectory)
+    inputs:
+      pwsh: true
+      targetType: 'inline'
+      workingDirectory: $(Build.SourcesDirectory)
+      script: |
+        git config --global url.https://$(PAT)@dev.azure.com.insteadOf "https://dev.azure.com"
+  - task: PowerShell@2
+    displayName: Change backend type
+    env:
+      AZDO_ORG_SERVICE_URL: $(SYSTEM.TEAMFOUNDATIONCOLLECTIONURI)
+    inputs:
+      pwsh: true
+      targetType: 'inline'
+      ${{ if eq(parameters['infrastructureDirectory'], 'default' ) }}:
+        workingDirectory: '$(Build.SourcesDirectory)'
+      ${{ if ne(parameters['infrastructureDirectory'], 'default' ) }}:
+        workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.infrastructureDirectory }}'
+      script: |
+        $content = [System.IO.File]::ReadAllText("providers.tf").Replace('backend "azurerm"', 'backend "local"')
+        [System.IO.File]::WriteAllText("providers.tf", $content)
+  - task: PowerShell@2
+    displayName: Terraform Init
+    env:
+      HOMEPATH: $(Build.SourcesDirectory)
+      USERPROFILE: $(Build.SourcesDirectory)
+    inputs:
+      pwsh: true
+      targetType: 'inline'
+      script: |
+        terraform init
+      ${{ if eq(parameters['infrastructureDirectory'], 'default' ) }}:
+        workingDirectory: '$(Build.SourcesDirectory)'
+      ${{ if ne(parameters['infrastructureDirectory'], 'default' ) }}:
+        workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.infrastructureDirectory }}'
+  - task: PowerShell@2
+    displayName: Terraform Validate
+    inputs:
+      pwsh: true
+      targetType: 'inline'
+      script: 'terraform validate'
+      ${{ if eq(parameters['infrastructureDirectory'], 'default' ) }}:
+        workingDirectory: '$(Build.SourcesDirectory)'
+      ${{ if ne(parameters['infrastructureDirectory'], 'default' ) }}:
+        workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.infrastructureDirectory }}'
+  - task: PowerShell@2
+    displayName: Change backend type
+    env:
+      AZURE_DEVOPS_EXT_PAT: $(PAT)
+    inputs:
+      pwsh: true
+      targetType: 'inline'
+      ${{ if eq(parameters['infrastructureDirectory'], 'default' ) }}:
+        workingDirectory: '$(Build.SourcesDirectory)'
+      ${{ if ne(parameters['infrastructureDirectory'], 'default' ) }}:
+        workingDirectory: '$(Build.SourcesDirectory)/${{ parameters.infrastructureDirectory }}'
+      script: |
+        $content = [System.IO.File]::ReadAllText("providers.tf").Replace('backend "local"', 'backend "azurerm"')
+        [System.IO.File]::WriteAllText("providers.tf", $content)
+  - task: CopyFiles@2
+    displayName: 'Copy Files'
+    inputs:
+      pwsh: true
+      ${{ if eq(parameters['infrastructureDirectory'], 'default' ) }}:
+        SourceFolder: '$(Build.SourcesDirectory)'
+      ${{ if ne(parameters['infrastructureDirectory'], 'default' ) }}:
+        SourceFolder: '$(Build.SourcesDirectory)/${{ parameters.infrastructureDirectory }}'
+      Contents: |
+        **/*
+        !.terraform/**/*
+        !tools/**
+        !imports/**
+        !AppData/**
+        !*.txt
+      TargetFolder: '$(Build.ArtifactStagingDirectory)/Infrastructure'
+  - publish: '$(Build.ArtifactStagingDirectory)/Infrastructure'
+    displayName: 'Publish Build Artifact'
+    artifact: Infrastructure
