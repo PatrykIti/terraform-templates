@@ -68,7 +68,7 @@ jobs:
   - task: PowerShell@2
     displayName: Change backend type
     env:
-      AZURE_DEVOPS_EXT_PAT: $(PAT)
+      AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
     inputs:
       pwsh: true
       targetType: 'inline'
