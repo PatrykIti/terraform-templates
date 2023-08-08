@@ -1,0 +1,11 @@
+parameters:
+  - name: infrastructureDirectory
+    type: string
+    default: default
+
+stages:
+  - stage: Build
+    jobs:
+    - template: ../jobs/build/terraformInit.yml
+      parameters:
+        infrastructureDirectory: ${{ parameters.infrastructureDirectory }}

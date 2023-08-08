@@ -1,7 +1,7 @@
 variables:
   azureSubscription: PatrykITI
   azureServiceConnection: PATRYKITI-CONN
-  isMultiRegional: false
+  isMultiRegional: true
   locationAcronymPrimary: eun
   locationAcronymSecondary: euw
   releaseAgentPoolName: windows-latest
