@@ -65,7 +65,7 @@ jobs:
             targetType: 'inline'
             workingDirectory: $(Build.SourcesDirectory)
             script: |
-              git config --global url.https://$(PAT)@dev.azure.com.insteadOf "https://dev.azure.com"
+              git config --global url.https://$(System.AccessToken)@dev.azure.com.insteadOf "https://dev.azure.com"
         - task: PowerShell@2
           displayName: Terraform Init
           env:
